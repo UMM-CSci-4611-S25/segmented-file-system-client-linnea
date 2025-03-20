@@ -6,7 +6,7 @@ fn main() {
 // the existence of types like `FileManager`, `Packet`, and `PacketParseError`.
 // You can use this code as a starting point for the exercise, or you can
 // delete it and write your own code with the same function signature.
-
+// 
 /*
 
 use std::{
