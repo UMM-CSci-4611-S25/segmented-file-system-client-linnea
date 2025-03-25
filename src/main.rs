@@ -1,17 +1,13 @@
-fn main() {
-    println!("Hello, world!");
-}
 
 // Below is a version of the `main` function and some error types. This assumes
 // the existence of types like `FileManager`, `Packet`, and `PacketParseError`.
 // You can use this code as a starting point for the exercise, or you can
 // delete it and write your own code with the same function signature.
 
-/*
+
 
 use std::{
-    io::{self, Write},
-    net::UdpSocket,
+    collections::HashMap, ffi::OsString, io::{self, Write}, net::UdpSocket, os::unix::ffi::OsStringExt
 };
 
 #[derive(Debug)]
@@ -31,6 +27,141 @@ impl From<PacketParseError> for ClientError {
         Self::PacketParseError(e)
     }
 }
+
+#[derive(Debug)]
+pub enum PacketParseError {
+    InvalidHeaderPacket,
+    InvalidDataPacket,
+
+}
+
+pub enum Packet {
+    Header(Header),
+    Data(Data)
+}
+
+pub struct Header {
+    file_id: u8,
+    file_name: OsString
+}
+
+pub struct Data {
+    file_id: u8,
+    packet_number: u16,
+    is_last_packet: bool,
+    data: Vec<u8>
+}
+
+pub struct FileManager {
+    files: HashMap<u8, Vec<u8>>,
+    received_packets: HashMap<u8, u16>,
+    total_packets: HashMap<u8, u16>,
+}
+
+impl FileManager {
+    pub fn default() -> Self {
+        Self {
+            files: HashMap::new(),
+            received_packets: HashMap::new(),
+            total_packets: HashMap::new(),
+        }
+    }
+
+    pub fn process_packet(&mut self, packet: Packet) {
+        match packet {
+            Packet::Header(header) => {
+                self.total_packets.insert(header.file_id, 0);
+                self.received_packets.insert(header.file_id, 0);
+            }
+            Packet::Data(data) => {
+                let file_id = data.file_id;
+                let packet_number = data.packet_number;
+                let is_last_packet = data.is_last_packet;
+                let data = data.data;
+
+                let file = self.files.entry(file_id).or_insert_with(Vec::new);
+                file.extend(data);
+
+                let received_packets = self.received_packets.get_mut(&file_id).unwrap();
+                *received_packets += 1;
+
+                if is_last_packet {
+                    let total_packets = self.total_packets.get(&file_id).unwrap();
+                    if *received_packets == *total_packets {
+                        self.write_file(file_id);
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn received_all_packets(&self) -> bool {
+        self.received_packets.iter().all(|(file_id, received_packets)| {
+            let total_packets = self.total_packets.get(file_id).unwrap();
+            received_packets == total_packets
+        })
+    }
+
+    pub fn write_file(&self, file_id: u8) {
+        let file = self.files.get(&file_id).unwrap();
+        let file_name = OsString::from("file_").into_vec();
+        let file_name = OsString::from_vec(file_name);
+        let file_name = file_name.into_string().unwrap();
+        let file_name = format!("{}.bin", file_name);
+        std::fs::write(file_name, file).unwrap();
+    }
+
+    pub fn write_all_files(&self) -> Result<(), std::io::Error> {
+        for (file_id, file) in &self.files {
+            let file_name = OsString::from("file_").into_vec();
+            let file_name = OsString::from_vec(file_name);
+            let file_name = file_name.into_string().unwrap();
+            let file_name = format!("{}.bin", file_name);
+            std::fs::write(file_name, file)?;
+        }
+        Ok(())
+    }
+
+}
+
+
+impl TryFrom<&[u8]> for Packet {
+    type Error = PacketParseError;
+
+    fn try_from(buffer: &[u8]) -> Result<Self, Self::Error> {
+
+        if buffer[0] % 2 == 0 {  //header packet
+
+            if buffer.len() < 4 {
+                return Err(PacketParseError::InvalidHeaderPacket);
+            }
+
+            let file_name= OsString::from_vec(buffer[2..].to_vec());
+
+            let file_id = buffer[1];
+
+            Ok(Packet::Header(Header { file_id, file_name }))
+        }
+        else {
+
+            if buffer.len() < 6 {
+                return Err(PacketParseError::InvalidDataPacket);
+            }
+            let file_id = buffer[1];
+            let packet_number_bytes = [buffer[2], buffer[3]];
+            let packet_number = u16::from_be_bytes(packet_number_bytes);
+
+            let is_last_packet = buffer[0] % 4 == 3;
+            let data = buffer[4..].to_vec();
+
+            Ok(Packet::Data(Data { file_id, packet_number, is_last_packet, data}))
+
+        }
+
+    }
+}
+
+
 
 fn main() -> Result<(), ClientError> {
     let sock = UdpSocket::bind("0.0.0.0:7077")?;
@@ -56,4 +187,5 @@ fn main() -> Result<(), ClientError> {
     Ok(())
 }
 
- */
+
+
