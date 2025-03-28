@@ -1,11 +1,3 @@
-
-// Below is a version of the `main` function and some error types. This assumes
-// the existence of types like `FileManager`, `Packet`, and `PacketParseError`.
-// You can use this code as a starting point for the exercise, or you can
-// delete it and write your own code with the same function signature.
-
-
-
 use std::{
     collections::HashMap, ffi::OsString, io::{self, Write}, net::UdpSocket, os::unix::ffi::OsStringExt
 };
@@ -53,8 +45,7 @@ pub struct Data {
 }
 
 pub struct FileManager {
-    files: HashMap<u8, Vec<Packet>>,
-    headers: HashMap<u8, Packet>,
+    files: HashMap<u8, Vec<u8>>,
     received_packets: HashMap<u8, u16>,
     total_packets: HashMap<u8, u16>,
 }
@@ -63,7 +54,6 @@ impl FileManager {
     pub fn default() -> Self {
         Self {
             files: HashMap::new(),
-            headers: HashMap::new(),
             received_packets: HashMap::new(),
             total_packets: HashMap::new(),
         }
@@ -72,108 +62,49 @@ impl FileManager {
     pub fn process_packet(&mut self, packet: Packet) {
         match packet {
             Packet::Header(header) => {
-                self.headers.insert(header.file_id, Packet::Header(header));
+                self.total_packets.insert(header.file_id, 0);
+                self.received_packets.insert(header.file_id, 0);
             }
             Packet::Data(data) => {
                 let file_id = data.file_id;
                 let packet_number = data.packet_number;
                 let is_last_packet = data.is_last_packet;
+                let data = data.data;
 
+                let file = self.files.entry(file_id).or_insert_with(Vec::new);
+                file.extend(data);
 
-                let file = self.files.entry(data.file_id).or_insert_with(Vec::new);
-                file.push(Packet::Data(data));
-
-                let received_packets = self.received_packets.entry(file_id).or_insert(0);
+                let received_packets = self.received_packets.get_mut(&file_id).unwrap();
                 *received_packets += 1;
-                println!("{} for {}", received_packets, file_id);
-
-                if is_last_packet {
-                   let total = self.total_packets.entry(file_id).or_insert(0);
-                   *total = packet_number;
-                }
-
             }
         }
     }
 
     pub fn received_all_packets(&self) -> bool {
-        if self.received_packets.is_empty() {
-            return false
-        }
-        let mut ids_recieved = 0;
         self.received_packets.iter().all(|(file_id, received_packets)| {
-            let total_packets = match self.total_packets.get(file_id) {
-                Some(num) => num,
-                None => return false
-            };
-            ids_recieved += 1;
-            // if total_packets == &0 { //should return false in match statement but does not
-            //     return false
-            // }
-            println!("{} = {}, {}", received_packets, total_packets + 1, ids_recieved);
-            *received_packets == *total_packets + 1 && ids_recieved == 3
+            let total_packets = self.total_packets.get(file_id).unwrap();
+            received_packets == total_packets
         })
     }
 
-    pub fn sort_and_return_data(&self, file_id: u8) -> Vec<u8> {
-        let unsorted_packets = self.files.get(&file_id).unwrap();
-        let mut data_map: HashMap<u16, Vec<u8>> = HashMap::new();
-        let total = self.total_packets.get(&file_id).unwrap();
-        let mut whole_data: Vec<u8> = Vec::new();
-
-        for packet in unsorted_packets {
-            let packet_num: u16;
-            let data_vec: Vec<u8>;
-            match packet {
-                Packet::Header(_) => {
-                    packet_num = 0;
-                    data_vec = Vec::new();
-                },
-                Packet::Data(data) => {
-                    packet_num = data.packet_number;
-                    data_vec = data.data.clone();
-                },
-            }
-
-            data_map.insert(packet_num, data_vec);
-
-        }
-
-        for i in 1..*total {
-            let data_part = data_map.get_mut(&i).unwrap();
-            whole_data.append(data_part);
-        }
-       
-
-
-       
-        whole_data
-        
-    }
-
     pub fn write_file(&self, file_id: u8) {
-        
-        let name_packet = self.headers.get(&file_id).unwrap();
-        let file_name: OsString;
-        
-        match name_packet {
-            Packet::Header(header) => file_name = header.file_name.clone(),
-            Packet::Data(_) => file_name = "it_went_wrong.txt".into(),
-        };
-
-        let data = self.sort_and_return_data(file_id);
-
-
-
-        std::fs::write(file_name, data).unwrap();
+        let file = self.files.get(&file_id).unwrap();
+        let file_name = OsString::from("file_").into_vec();
+        let file_name = OsString::from_vec(file_name);
+        let file_name = file_name.into_string().unwrap();
+        let file_name = format!("{}.bin", file_name);
+        std::fs::write(file_name, file).unwrap();
     }
 
     pub fn write_all_files(&self) -> Result<(), std::io::Error> {
-        println!("in write all files");
-        for (file_id, _file) in &self.files {
-            
-            self.write_file(*file_id);
-            println!("{}", file_id);
+        for (file_id, file) in &self.files {
+            // print!("test");
+            let file_name = OsString::from("file_").into_vec();
+            let file_name = OsString::from_vec(file_name);
+            let file_name = file_name.into_string().unwrap();
+            let file_name = format!("{}.bin", file_name);
+            // print!("{}", file_name);
+            std::fs::write(file_name, file)?;
         }
         Ok(())
     }
@@ -242,6 +173,3 @@ fn main() -> Result<(), ClientError> {
 
     Ok(())
 }
-
-
-
