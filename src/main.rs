@@ -100,19 +100,43 @@ impl FileManager {
         if self.received_packets.is_empty() {
             return false
         }
+        // let mut ids_recieved = 0;
+        // self.received_packets.iter().all(|(file_id, received_packets)| {
+        //     let total_packets = match self.total_packets.get(file_id) {
+        //         Some(num) => num,
+        //         None => return false
+        //     };
+        //     ids_recieved += 1;
+        //     // if total_packets == &0 { //should return false in match statement but does not
+        //     //     return false
+        //     // }
+        //     if *received_packets == *total_packets + 1 {
+        //     println!("{} = {}, {}", received_packets, total_packets + 1, ids_recieved);
+        //     }
+        //     *received_packets == *total_packets + 1 && ids_recieved == 3
+        // })
+
+        let iterate = self.received_packets.iter();
+
         let mut ids_recieved = 0;
-        self.received_packets.iter().all(|(file_id, received_packets)| {
+        for  (file_id, received_packets) in iterate {
             let total_packets = match self.total_packets.get(file_id) {
                 Some(num) => num,
                 None => return false
             };
             ids_recieved += 1;
-            // if total_packets == &0 { //should return false in match statement but does not
-            //     return false
-            // }
+
+            if *received_packets == *total_packets + 1 && *total_packets > 400{
             println!("{} = {}, {}", received_packets, total_packets + 1, ids_recieved);
-            *received_packets == *total_packets + 1 && ids_recieved == 3
-        })
+            }
+            if !*received_packets == *total_packets + 1 || !self.headers.contains_key(file_id){
+                return false
+            }
+        }
+
+        println!("final ids recieved {}", ids_recieved);
+
+        ids_recieved == 3
     }
 
     pub fn sort_and_return_data(&self, file_id: u8) -> Vec<u8> {
@@ -139,11 +163,13 @@ impl FileManager {
 
         }
 
-        for i in 1..*total {
+        // if *total < 400{
+        for i in 0..*total + 1 {
+            println!("total {} on i {}", *total, i);
             let data_part = data_map.get_mut(&i).unwrap();
             whole_data.append(data_part);
-        }
-       
+        // }
+    }
 
 
        
@@ -173,7 +199,7 @@ impl FileManager {
         for (file_id, _file) in &self.files {
             
             self.write_file(*file_id);
-            println!("{}", file_id);
+            println!("writing file id: {}", file_id);
         }
         Ok(())
     }
@@ -220,6 +246,8 @@ impl TryFrom<&[u8]> for Packet {
 
 
 fn main() -> Result<(), ClientError> {
+
+    let mut total_recieved = 0;
     let sock = UdpSocket::bind("0.0.0.0:7077")?;
 
     let remote_addr = "127.0.0.1:6014";
@@ -234,9 +262,12 @@ fn main() -> Result<(), ClientError> {
         let len = sock.recv(&mut buf)?;
         let packet: Packet = buf[..len].try_into()?;
         print!(".");
-        io::stdout().flush()?;
+        total_recieved += 1;
         file_manager.process_packet(packet);
+        io::stdout().flush()?;
     }
+
+    println!("total recieved {}", total_recieved);
 
     file_manager.write_all_files()?;
 
