@@ -28,28 +28,65 @@ impl From<PacketParseError> for ClientError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum PacketParseError {
     InvalidHeaderPacket,
     InvalidDataPacket,
-
 }
 
+#[derive(Debug)]
 pub enum Packet {
     Header(Header),
     Data(Data)
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Header {
     file_id: u8,
-    file_name: OsString
+    file_name: OsString,
 }
 
+impl TryFrom<&[u8]> for Header {
+    type Error = PacketParseError;
+
+    fn try_from(buffer: &[u8]) -> Result<Self, Self::Error> {
+        if buffer.len() < 3 {
+            return Err(PacketParseError::InvalidHeaderPacket);
+        }
+        let file_id = buffer[1];
+        let file_name = OsString::from_vec(buffer[2..].to_vec());
+        Ok(Header { file_id, file_name })
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Data {
     file_id: u8,
     packet_number: u16,
     is_last_packet: bool,
     data: Vec<u8>
+}
+
+impl TryFrom<&[u8]> for Data {
+    type Error = PacketParseError;
+
+    fn try_from(buffer: &[u8]) -> Result<Self, Self::Error> {
+        if buffer.len() < 6 {
+            return Err(PacketParseError::InvalidDataPacket);
+        }
+        let file_id = buffer[1];
+        let packet_number_bytes = [buffer[2], buffer[3]];
+        let packet_number = u16::from_be_bytes(packet_number_bytes);
+        let is_last_packet = buffer[4] == 1;
+        let data = buffer[5..].to_vec();
+
+        Ok(Data {
+            file_id,
+            packet_number,
+            is_last_packet,
+            data,
+        })
+    }
 }
 
 pub struct FileManager {
@@ -124,7 +161,6 @@ impl FileManager {
 
 }
 
-
 impl TryFrom<&[u8]> for Packet {
     type Error = PacketParseError;
 
@@ -185,6 +221,98 @@ fn main() -> Result<(), ClientError> {
     file_manager.write_all_files()?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn emoji_in_file_name() {
+        let sparkle_heart: &[u8] = "\x00\x0CThis file is lovely 💖".as_bytes();
+        let result = Header::try_from(sparkle_heart);
+        assert_eq!(
+            result,
+            Ok(Header {
+                file_id: 12,
+                file_name: "This file is lovely 💖".to_string().into()
+            })
+        );
+    }
+
+    #[test]
+    fn valid_header_packet() {
+        let valid_packet: &[u8] = b"\x00\x01Hello";
+        let result = Header::try_from(valid_packet);
+        assert_eq!(
+            result,
+            Ok(Header {
+                file_id: 1,
+                file_name: OsString::from("Hello")
+            })
+        );
+    }
+
+    #[test]
+    fn invalid_header_packet() {
+        let invalid_packet: &[u8] = b"\x00\x01";
+        let result = Header::try_from(invalid_packet);
+        assert_eq!(result, Err(PacketParseError::InvalidHeaderPacket));
+    }
+
+    #[test]
+    fn invalid_data_packet() {
+        let invalid_packet: &[u8] = b"\x01\x01";
+        let result = Data::try_from(invalid_packet);
+        assert_eq!(result, Err(PacketParseError::InvalidDataPacket));
+    }
+
+    #[test]
+    fn valid_data_packet() {
+        let valid_packet: &[u8] = b"\x01\x01\x00\x01\x00\x02Hello";
+        let result = Data::try_from(valid_packet);
+        assert_eq!(
+            result,
+            Ok(Data {
+                file_id: 1,
+                packet_number: 1,
+                is_last_packet: false,
+                data: b"\x02Hello".to_vec()
+            })
+        );
+    }
+
+    #[test]
+    fn test_file_manager() {
+        let mut file_manager = FileManager::default();
+        let header_packet = Packet::Header(Header {
+            file_id: 1,
+            file_name: OsString::from("test_file"),
+        });
+        file_manager.process_packet(header_packet);
+
+        let data_packet = Packet::Data(Data {
+            file_id: 1,
+            packet_number: 1,
+            is_last_packet: false,
+            data: b"Hello".to_vec(),
+        });
+        file_manager.process_packet(data_packet);
+
+        assert_eq!(file_manager.files.len(), 1);
+    }
+
+    #[test]
+    fn test_packet_parsing() {
+        let header_packet: &[u8] = b"\x00\x01Hello";
+        let data_packet: &[u8] = b"\x01\x01\x00\x01\x00\x02Hello";
+
+        let header_result = Packet::try_from(header_packet);
+        assert!(header_result.is_ok());
+
+        let data_result = Packet::try_from(data_packet);
+        assert!(data_result.is_ok());
+    }
 }
 
 
