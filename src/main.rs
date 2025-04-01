@@ -89,7 +89,7 @@ impl FileManager {
 
                 if is_last_packet {
                    let total = self.total_packets.entry(file_id).or_insert(0);
-                   *total = packet_number;
+                   *total = packet_number; //change to just inserting
                 }
 
             }
@@ -126,10 +126,15 @@ impl FileManager {
             };
             ids_recieved += 1;
 
+            println!("Received packets for {file_id} is {received_packets} with total {}.", *total_packets);
             if *received_packets == *total_packets + 1 && *total_packets > 400{
             println!("{} = {}, {}", received_packets, total_packets + 1, ids_recieved);
             }
-            if !*received_packets == *total_packets + 1 || !self.headers.contains_key(file_id){
+            if !(*received_packets == *total_packets + 1){
+                return false
+            }
+
+            if !self.headers.contains_key(file_id) {
                 return false
             }
         }
@@ -141,8 +146,10 @@ impl FileManager {
 
     pub fn sort_and_return_data(&self, file_id: u8) -> Vec<u8> {
         let unsorted_packets = self.files.get(&file_id).unwrap();
+        println!("The number of packets for file {file_id} is {}.", unsorted_packets.len());
         let mut data_map: HashMap<u16, Vec<u8>> = HashMap::new();
         let total = self.total_packets.get(&file_id).unwrap();
+        assert_eq!(*total as usize + 1, unsorted_packets.len());
         let mut whole_data: Vec<u8> = Vec::new();
 
         for packet in unsorted_packets {
@@ -160,8 +167,9 @@ impl FileManager {
             }
 
             data_map.insert(packet_num, data_vec);
-
         }
+
+        println!("`data_map` has size {}.", data_map.len());
 
         // if *total < 400{
         for i in 0..*total + 1 {
