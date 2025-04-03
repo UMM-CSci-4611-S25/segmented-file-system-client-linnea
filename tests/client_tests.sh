@@ -35,21 +35,20 @@ setup(){
   # the diff if this test is failing. Similar lines can
   # help with the other tests.
   # diff test/target-files/small.txt src/small.txt
-  run diff test/target-files/small.txt src/small.txt
+  run diff tests/target-files/small.txt small.txt
 
-  # exit 1
 
   [ "$status" -eq 0 ]
 }
 
-# @test "Your client correctly assembled AsYouLikeIt.txt" {
-#   run diff test/target-files/AsYouLikeIt.txt src/AsYouLikeIt.txt
+@test "Your client correctly assembled AsYouLikeIt.txt" {
+  run diff tests/target-files/AsYouLikeIt.txt AsYouLikeIt.txt
 
-#   [ "$status" -eq 0 ]
-# }
+  [ "$status" -eq 0 ]
+}
 
-# @test "Your client correctly assembled binary.jpg" {
-#   run diff test/target-files/binary.jpg src/binary.jpg
+@test "Your client correctly assembled binary.jpg" {
+  run diff tests/target-files/binary.jpg binary.jpg
 
-#   [ "$status" -eq 0 ]
-# }
+  [ "$status" -eq 0 ]
+}
